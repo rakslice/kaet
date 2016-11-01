@@ -55,6 +55,7 @@ func main() {
 	fmt.Fprintf(c, "USER %s\r\n", USER)
 	fmt.Fprintf(c, "NICK %s\r\n", USER)
 	fmt.Fprintf(c, "JOIN #%s\r\n", CHANNEL)
+	fmt.Fprintf(c, "CAP REQ :twitch.tv/commands\r\n")
 
 	go func() {
 		for m := range out {

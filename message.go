@@ -7,6 +7,7 @@ import (
 )
 
 type message struct {
+	Prefix string
 	DisplayName string
 	Mod         bool
 	Sub         bool
@@ -70,7 +71,7 @@ func parse(line []byte) *message {
 			}
 			b.WriteByte(line[i])
 		}
-		// prefix := b.String()
+		m.Prefix = b.String()
 		b.Reset()
 		i++
 	}

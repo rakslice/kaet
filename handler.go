@@ -96,14 +96,18 @@ func handle(out chan string, m *message) {
 		out <- fmt.Sprintf("PONG :%s\r\n", strings.Join(m.Args, " "))
 	case "RECONNECT":
 		os.Exit(69)
-	case "PRIVMSG":
+	case "PRIVMSG", "WHISPER":
 		msg := strings.ToLower(m.Args[1])
 		for _, prefix := range cmdPrefixes {
 			if strings.HasPrefix(msg, prefix) {
 				p := split(m.Args[1][len(prefix):], 2)
 				if c := cmds.Get(p[0]); c != nil && (!c.modOnly || m.Mod) {
 					if response := c.fn(p[1]); response != "" {
-						out <- fmt.Sprintf("PRIVMSG %s :\u200B%s\r\n", m.Args[0], response)
+						if m.Command == "PRIVMSG" {
+							out <- fmt.Sprintf("PRIVMSG %s :\u200B%s\r\n", m.Args[0], response)
+						} else if m.Prefix != "" {
+							out <- fmt.Sprintf("PRIVMSG #%s :/w %s \u200B%s\r\n", CHANNEL, strings.SplitN(m.Prefix, "!", 2)[0], response)
+						}
 					}
 				}
 				return
