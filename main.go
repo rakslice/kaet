@@ -19,8 +19,8 @@ import (
 )
 
 var (
-	CHANNEL       = "kate"
-	USER          = "kaet"
+	CHANNEL       = os.Getenv("CHANNEL")
+	USER          = os.Getenv("BOT_USER")
 	PASSWORD      = os.Getenv("PASSWORD")
 	MASHAPE_KEY   = os.Getenv("MASHAPE_KEY")
 	CLIENT_ID     = os.Getenv("CLIENT_ID")
@@ -35,6 +35,8 @@ func must(err error) {
 }
 
 func main() {
+	log.Printf("CHANNEL=%v\n", CHANNEL)
+	log.Printf("BOT_USER=%v\n", USER)
 	log.Printf("PASSWORD=%v\n", PASSWORD)
 	log.Printf("MASHAPE_KEY=%v\n", MASHAPE_KEY)
 	log.Printf("CLIENT_ID=%v\n", CLIENT_ID)
