@@ -176,7 +176,8 @@ func handle(out chan string, m *message) {
 	case "RECONNECT":
 		os.Exit(69)
 	case "PRIVMSG":
-		if strings.HasPrefix(m.Prefix, "twitchnotify!twitchnotify@") {
+		//FIXME hardcoded channel name
+		if m.Args[0] == "#kate" && strings.HasPrefix(m.Prefix, "twitchnotify!twitchnotify@") {
 			usernameEnd := strings.Index(m.Args[1], subMessageSuffix)
 			if usernameEnd >= 0 {
 				username := m.Args[1][:usernameEnd]
