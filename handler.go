@@ -118,6 +118,7 @@ func NumberOfSubs() (int, error) {
 	getParams := make(url.Values)
 	getParams.Add("limit", "0")
 
+	//FIXME hardcoded channel name
 	err := kraken(&subsCount, "channels", "kate", "subscriptions?" + getParams.Encode())
 	if err != nil {
 		return 0, err
@@ -165,6 +166,7 @@ func doEvt(event string, params EvtMessageParams) (string, error) {
 	return buf.String(), nil
 }
 
+//FIXME hardcoded channel name
 const subMessageSuffix = " just subscribed to kate!"
 
 func handle(out chan string, m *message) {

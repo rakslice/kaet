@@ -5,7 +5,8 @@ import (
 	"github.com/jarcoal/httpmock"
 )
 
-func TestOtherChannelSub(t *testing.T) {
+func TestChannelSub(t *testing.T) {
+	//FIXME hardcoded channel name
 	line := []byte(":twitchnotify!twitchnotify@twitchnotify.tmi.twitch.tv PRIVMSG #kate :someusername just subscribed to kate!\r\n")
 	m := parse(line)
 
@@ -24,6 +25,7 @@ func TestSubMessageWithCount(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
+	//FIXME hardcoded channel name
 	line := []byte(":twitchnotify!twitchnotify@twitchnotify.tmi.twitch.tv PRIVMSG #kate :someusername just subscribed to kate!\r\n")
 	m := parse(line)
 
@@ -38,6 +40,7 @@ func TestSubMessageWithCount(t *testing.T) {
   "subscriptions": []
 }`
 
+	//FIXME hardcoded channel name
 	httpmock.RegisterResponder("GET", "https://api.twitch.tv/kraken/channels/kate/subscriptions",
 		httpmock.NewStringResponder(200, cannedResponse))
 
