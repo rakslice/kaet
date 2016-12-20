@@ -5,6 +5,36 @@ import (
 	"github.com/jarcoal/httpmock"
 )
 
+func TestChannelSubPrime(t *testing.T) {
+	//FIXME hardcoded channel name
+	line := []byte(":twitchnotify!twitchnotify@twitchnotify.tmi.twitch.tv PRIVMSG #kate :So-and-so just subscribed with Twitch Prime!\r\n")
+	m := parse(line)
+
+	evtMsgs.Add("newsub", "Welcome to the channel, {{.Username}}")
+
+	out := make(chan string, 5000)
+	handle(out, m)
+	if assertEqualInt(t, 1, len(out)) {
+		return
+	}
+
+	assertEqualStr(t, "Welcome to the channel, So-and-so", <-out)
+}
+
+func TestOtherChannel(t *testing.T) {
+	//FIXME hardcoded channel name
+	line := []byte(":twitchnotify!twitchnotify@twitchnotify.tmi.twitch.tv PRIVMSG #otherchannel :So-and-so just subscribed with Twitch Prime!\r\n")
+	m := parse(line)
+
+	evtMsgs.Add("newsub", "Welcome to the channel, {{.Username}}")
+
+	out := make(chan string, 5000)
+	handle(out, m)
+	if assertEqualInt(t, 0, len(out)) {
+		return
+	}
+}
+
 func TestChannelSub(t *testing.T) {
 	//FIXME hardcoded channel name
 	line := []byte(":twitchnotify!twitchnotify@twitchnotify.tmi.twitch.tv PRIVMSG #kate :someusername just subscribed to kate!\r\n")

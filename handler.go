@@ -167,7 +167,7 @@ func doEvt(event string, params EvtMessageParams) (string, error) {
 }
 
 //FIXME hardcoded channel name
-const subMessageSuffix = " just subscribed to kate!"
+const subMessageSuffix = " just subscribed"
 
 func handle(out chan string, m *message) {
 	switch m.Command {
@@ -176,15 +176,19 @@ func handle(out chan string, m *message) {
 	case "RECONNECT":
 		os.Exit(69)
 	case "PRIVMSG":
-		if strings.HasPrefix(m.Prefix, "twitchnotify!twitchnotify@") && strings.HasSuffix(m.Args[1], subMessageSuffix) {
-			username := m.Args[1][:len(m.Args[1])-len(subMessageSuffix)]
-			// TODO keep track of the number of subs in the bot in case the API doesn't update fast enough
-			eventOutput, err := doEvt("newsub", EvtMessageParams{username})
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "evt sub returned error: %s\n", err)
-			}
-			if eventOutput != "" {
-				out <- eventOutput
+		//FIXME hardcoded channel name
+		if m.Args[0] == "#kate" && strings.HasPrefix(m.Prefix, "twitchnotify!twitchnotify@") {
+			usernameEnd := strings.Index(m.Args[1], subMessageSuffix)
+			if usernameEnd >= 0 {
+				username := m.Args[1][:usernameEnd]
+				// TODO keep track of the number of subs in the bot in case the API doesn't update fast enough
+				eventOutput, err := doEvt("newsub", EvtMessageParams{username})
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "evt sub returned error: %s\n", err)
+				}
+				if eventOutput != "" {
+					out <- eventOutput
+				}
 			}
 		}
 
