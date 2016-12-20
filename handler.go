@@ -86,6 +86,7 @@ func init() {
 	// Event message commands
 	cmds.cmds["seteventmessage"] = &command{cmdSetEventMessage, true}
 	cmds.cmds["removeeventmessage"] = &command{cmdRemoveEventMessage, true}
+	cmds.cmds["testeventmessage"] = &command{cmdTestEventMessage, true}
 
 	// Aliases
 	cmds.Alias("halp", "help")
@@ -139,30 +140,29 @@ func prepTemplate(event string, msgTemplate string, params *EvtMessageParams) (*
 	return tmpl, err
 }
 
-func doEvt(out chan string, event string, m *message, params EvtMessageParams) error {
+func doEvt(event string, params EvtMessageParams) (string, error) {
 	_, evtFound := allEvents[event]
 	if !evtFound {
-		fmt.Fprintf(os.Stderr, "WARNING: Event '%s' is missing from allEvents so users will not be able to set a message", m)
+		fmt.Fprintf(os.Stderr, "WARNING: Event '%s' is missing from allEvents so users will not be able to set a message", event)
 	}
 
 	msgTemplate, found := evtMsgs.Get(event)
 	if !found {
-		return nil
+		return "", nil
 	}
 
 	// TODO keep the prepped template around
 	tmpl, err := prepTemplate(event, msgTemplate, &params)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	buf := new(bytes.Buffer)
 	err = tmpl.Execute(buf, params)
 	if err != nil {
-		return err
+		return "", err
 	}
-	out <- buf.String()
-	return nil
+	return buf.String(), nil
 }
 
 const subMessageSuffix = " just subscribed to kate!"
@@ -177,9 +177,12 @@ func handle(out chan string, m *message) {
 		if strings.HasPrefix(m.Prefix, "twitchnotify!twitchnotify@") && strings.HasSuffix(m.Args[1], subMessageSuffix) {
 			username := m.Args[1][:len(m.Args[1])-len(subMessageSuffix)]
 			// TODO keep track of the number of subs in the bot in case the API doesn't update fast enough
-			err := doEvt(out, "newsub", m, EvtMessageParams{username})
+			eventOutput, err := doEvt("newsub", EvtMessageParams{username})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "evt sub returned error: %s\n", err)
+			}
+			if eventOutput != "" {
+				out <- eventOutput
 			}
 		}
 
@@ -246,7 +249,12 @@ func cmdSetEventMessage(data string) string {
 
 	_, exists := allEvents[event]
 	if !exists {
-		return fmt.Sprintf("No message for: %s", event)
+		eventNames := make([]string, 0, len(allEvents))
+		for event := range allEvents {
+			eventNames = append(eventNames, event)
+		}
+
+		return fmt.Sprintf("There's no event '%s'. Available events: %s", event, strings.Join(eventNames, ", "))
 	}
 
 	// test prepare the template to check for problems
@@ -257,17 +265,32 @@ func cmdSetEventMessage(data string) string {
 	}
 
 	evtMsgs.Add(event, msgTemplate)
-	return fmt.Sprintf("Set message for %s", event)
+	return fmt.Sprintf("Message for %s set.", event)
 }
 
 func cmdRemoveEventMessage(event string) string {
 	_, exists := evtMsgs.Get(event)
 	if exists {
 		evtMsgs.Remove(event)
-		return fmt.Sprintf("Removed message for %s", event)
+		return fmt.Sprintf("Message for %s removed.", event)
 	} else {
-		return fmt.Sprintf("No message set for %s", event)
+		return fmt.Sprintf("There is already no message for %s", event)
 	}
+}
+
+func cmdTestEventMessage(data string) string {
+	v := split(data, 2)
+	event := v[0]
+
+	username := v[1]
+
+	params := EvtMessageParams{username}
+
+	eventOutput, err := doEvt(event, params)
+	if err != nil {
+		return fmt.Sprintf("ERROR: %s", err)
+	}
+	return eventOutput
 }
 
 func split(s string, p int) []string {
