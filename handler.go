@@ -7,12 +7,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"text/template"
+	"bytes"
+	"net/url"
 )
 
 var (
 	cmdPrefixes []string
 	quotes      *store
 	cmds        *commands
+	evtMsgs     *store
 )
 
 type commands struct {
@@ -50,6 +54,8 @@ func (c *commands) Get(key string) *command {
 func init() {
 	cmdPrefixes = []string{"!", USER + " ", fmt.Sprintf("@%s ", USER)}
 
+	evtMsgs = Store("eventmessages")
+
 	quotes = Store("quotes")
 
 	cmds = &commands{
@@ -77,6 +83,10 @@ func init() {
 	cmds.cmds["addcommand"] = &command{cmdAddCommand, true}
 	cmds.cmds["removecommand"] = &command{cmdRemoveCommand, true}
 
+	// Event message commands
+	cmds.cmds["seteventmessage"] = &command{cmdSetEventMessage, true}
+	cmds.cmds["removeeventmessage"] = &command{cmdRemoveEventMessage, true}
+
 	// Aliases
 	cmds.Alias("halp", "help")
 	cmds.Alias("add", "addcommand")
@@ -90,6 +100,73 @@ func init() {
 	cmds.Alias("code", "sourcecode")
 }
 
+// Fields accessible in the event message template
+type EvtMessageParams struct {
+	Username string
+}
+
+var allEvents = map[string]bool{
+	"newsub": true,
+}
+
+func NumberOfSubs() (int, error) {
+	subsCount := struct {
+		Total *int `json:"_total"`
+	}{}
+
+	getParams := make(url.Values)
+	getParams.Add("limit", "0")
+
+	err := kraken(&subsCount, "channels", "kate", "subscriptions?" + getParams.Encode())
+	if err != nil {
+		return 0, err
+	}
+	if subsCount.Total == nil {
+		return 0, fmt.Errorf("subscriptions response was missing total")
+	}
+	return *subsCount.Total, nil
+}
+
+func prepTemplate(event string, msgTemplate string, params *EvtMessageParams) (*template.Template, error) {
+	tmpl := template.New(event)
+	tmpl.Funcs(map[string]interface{} {
+		"NumberOfSubs": NumberOfSubs,
+	})
+	tmpl, err := tmpl.Parse(msgTemplate)
+	if err != nil {
+		return nil, err
+	}
+	return tmpl, err
+}
+
+func doEvt(out chan string, event string, m *message, params EvtMessageParams) error {
+	_, evtFound := allEvents[event]
+	if !evtFound {
+		fmt.Fprintf(os.Stderr, "WARNING: Event '%s' is missing from allEvents so users will not be able to set a message", m)
+	}
+
+	msgTemplate, found := evtMsgs.Get(event)
+	if !found {
+		return nil
+	}
+
+	// TODO keep the prepped template around
+	tmpl, err := prepTemplate(event, msgTemplate, &params)
+	if err != nil {
+		return err
+	}
+
+	buf := new(bytes.Buffer)
+	err = tmpl.Execute(buf, params)
+	if err != nil {
+		return err
+	}
+	out <- buf.String()
+	return nil
+}
+
+const subMessageSuffix = " just subscribed to kate!"
+
 func handle(out chan string, m *message) {
 	switch m.Command {
 	case "PING":
@@ -97,6 +174,15 @@ func handle(out chan string, m *message) {
 	case "RECONNECT":
 		os.Exit(69)
 	case "PRIVMSG":
+		if strings.HasPrefix(m.Prefix, "twitchnotify!twitchnotify@") && strings.HasSuffix(m.Args[1], subMessageSuffix) {
+			username := m.Args[1][:len(m.Args[1])-len(subMessageSuffix)]
+			// TODO keep track of the number of subs in the bot in case the API doesn't update fast enough
+			err := doEvt(out, "newsub", m, EvtMessageParams{username})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "evt sub returned error: %s\n", err)
+			}
+		}
+
 		msg := strings.ToLower(m.Args[1])
 		for _, prefix := range cmdPrefixes {
 			if strings.HasPrefix(msg, prefix) {
@@ -151,6 +237,37 @@ func cmdRemoveCommand(data string) string {
 	cmds.store.Remove(trigger)
 	delete(cmds.cmds, trigger)
 	return ""
+}
+
+func cmdSetEventMessage(data string) string {
+	v := split(data, 2)
+	event := v[0]
+	msgTemplate := v[1]
+
+	_, exists := allEvents[event]
+	if !exists {
+		return fmt.Sprintf("No message for: %s", event)
+	}
+
+	// test prepare the template to check for problems
+	_, prepErr := prepTemplate(event, msgTemplate, &EvtMessageParams{})
+
+	if prepErr != nil {
+		return fmt.Sprintf("Template error: %s", prepErr)
+	}
+
+	evtMsgs.Add(event, msgTemplate)
+	return fmt.Sprintf("Set message for %s", event)
+}
+
+func cmdRemoveEventMessage(event string) string {
+	_, exists := evtMsgs.Get(event)
+	if exists {
+		evtMsgs.Remove(event)
+		return fmt.Sprintf("Removed message for %s", event)
+	} else {
+		return fmt.Sprintf("No message set for %s", event)
+	}
 }
 
 func split(s string, p int) []string {
