@@ -294,6 +294,7 @@ func cmdRemoveCommand(data string) string {
 		return "I'm afraid I can't remove that command"
 	}
 	cmds.store.Remove(trigger)
+	cmds.scriptStore.Remove(trigger)
 	delete(cmds.cmds, trigger)
 	return ""
 }
