@@ -103,7 +103,7 @@ func init() {
 	cmds.cmds["removequote"] = &command{cmdRemoveQuote, true, false}
 	cmds.cmds["addcommand"] = &command{cmdAddCommand, true, false}
 	cmds.cmds["removecommand"] = &command{cmdRemoveCommand, true, false}
-	cmds.cmds["addscript"] = &command{cmdAddScript, true, false}
+	cmds.cmds["addcommandscript"] = &command{cmdAddCommandScript, true, false}
 
 	// Aliases
 	cmds.Alias("halp", "help")
@@ -116,6 +116,7 @@ func init() {
 	cmds.Alias("delcommand", "removecommand")
 	cmds.Alias("source", "sourcecode")
 	cmds.Alias("code", "sourcecode")
+	cmds.Alias("addcomscr", "addcommandscript")
 }
 
 func handle(out chan string, m *message) {
@@ -264,7 +265,7 @@ func setScriptForTrigger(trigger string, script string) string {
 	return ""
 }
 
-func cmdAddScript(data string) string {
+func cmdAddCommandScript(data string) string {
 	cmds.Lock()
 	defer cmds.Unlock()
 	v := split(data, 2)
