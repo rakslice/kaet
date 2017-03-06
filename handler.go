@@ -76,7 +76,7 @@ func init() {
 	}
 
 	for _, k := range cmds.scriptStore.Keys() {
-		v, _ := cmds.store.Get(k)
+		v, _ := cmds.scriptStore.Get(k)
 		setScriptForTrigger(k, v)
 	}
 
