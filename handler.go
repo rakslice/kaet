@@ -91,7 +91,7 @@ func init() {
 		cmds.cmds[k], _ = createScriptCommand(v)
 	}
 
-	// run init command if defined
+	// init script gives a chance to define script functions and globals
 	initCmd, initCmdFound := cmds.cmds["init"]
 	if initCmdFound {
 		initCmd.fn("")
