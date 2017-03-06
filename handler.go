@@ -91,6 +91,12 @@ func init() {
 		setScriptForTrigger(k, v)
 	}
 
+	// run init command if defined
+	initCmd, initCmdFound := cmds.cmds["init"]
+	if initCmdFound {
+		initCmd.fn("")
+	}
+
 	// Pleb commands
 	cmds.cmds["help"] = &command{cmdHelp, false, false}
 	cmds.cmds["uptime"] = &command{func(_ string) string { return getUptime(CHANNEL) }, false, false}
