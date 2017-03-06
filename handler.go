@@ -66,6 +66,9 @@ func init() {
 		luaState: lua.NewState(),
 	}
 
+	// TODO narrow the set of lua standard libraries we open to ones that make sense for scripting capabilities
+	lua.OpenLibraries(cmds.luaState)
+
 	// Dynamic commands
 	for _, k := range cmds.store.Keys() {
 		v, _ := cmds.store.Get(k)
@@ -208,8 +211,6 @@ func setScriptForTrigger(trigger string, script string) string {
 			}
 			return 0
 		}
-		// TODO narrow the set of standard libraries we open to ones that make sense for
-		lua.OpenLibraries(cmds.luaState, lua.RegistryFunction{"setChatOutput", setChatOutput})
 		err := lua.DoString(cmds.luaState, script)
 		if err != nil {
 			return fmt.Sprintf("script error: %s", err)
