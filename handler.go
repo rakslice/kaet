@@ -83,12 +83,12 @@ func init() {
 	// Dynamic commands
 	for _, k := range cmds.store.Keys() {
 		v, _ := cmds.store.Get(k)
-		cmds.cmds[k] = &command{func(_ string) string { return v }, false, true}
+		cmds.cmds[k], _ = createOutputCommand(v)
 	}
 
 	for _, k := range cmds.scriptStore.Keys() {
 		v, _ := cmds.scriptStore.Get(k)
-		setScriptForTrigger(k, v)
+		cmds.cmds[k], _ = createScriptCommand(v)
 	}
 
 	// run init command if defined
@@ -196,29 +196,43 @@ func cmdGetQuote(query string) string {
 	}
 }
 
-func cmdAddCommand(data string) string {
+func commonAddCommand(data string, curStore *store, commandFactory func(string) (*command, string)) string {
 	cmds.Lock()
 	defer cmds.Unlock()
 	v := split(data, 2)
-	trigger, msg := strings.TrimPrefix(v[0], "!"), v[1]
+	trigger, data := strings.TrimPrefix(v[0], "!"), v[1]
 	existingCmd, existingCmdFound := cmds.cmds[trigger]
 	if (existingCmdFound && !existingCmd.removable) {
 		return "I'm afraid I can't modify that command"
 	}
-	cmds.store.Add(trigger, msg)
-	cmds.cmds[trigger] = &command{func(_ string) string { return msg }, false, true}
-	return ""
+	curStore.Add(trigger, data)
+	var output string
+	cmds.cmds[trigger], output = commandFactory(data)
+	return output
 }
 
-func setScriptForTrigger(trigger string, script string) string {
+func cmdAddCommand(data string) string {
+	return commonAddCommand(data, cmds.store, createOutputCommand)
+}
+
+func cmdAddCommandScript(data string) string {
+	return commonAddCommand(data, cmds.scriptStore, createScriptCommand)
+}
+
+func createOutputCommand(msg string) (*command, string) {
+	newCmd := &command{func(_ string) string { return msg }, false, true}
+	return newCmd, ""
+}
+
+func createScriptCommand(script string) (*command, string) {
 	err := lua.LoadString(cmds.luaState, script)
 	if err != nil {
-		return fmt.Sprintf("script error: %s", err)
+		return nil, fmt.Sprintf("script error: %s", err)
 	}
 
 	// returns any chat output indicating a problem with the script
 	// is there a two step load / run option available so we can have less overhead each command run?
-	cmds.cmds[trigger] = &command{func(input string) string {
+	newCmd := &command{func(input string) string {
 		output := ""
 		// TODO set up additional RegistryFunction instances for variables and functions we want to be available to the script
 		setChatOutput := func(state *lua.State) int {
@@ -268,20 +282,7 @@ func setScriptForTrigger(trigger string, script string) string {
 			return output
 		}
 	}, false, true}
-	return ""
-}
-
-func cmdAddCommandScript(data string) string {
-	cmds.Lock()
-	defer cmds.Unlock()
-	v := split(data, 2)
-	trigger, script := strings.TrimPrefix(v[0], "!"), v[1]
-	existingCmd, existingCmdFound := cmds.cmds[trigger]
-	if (existingCmdFound && !existingCmd.removable) {
-		return "I'm afraid I can't modify that command"
-	}
-	cmds.scriptStore.Add(trigger, script)
-	return setScriptForTrigger(trigger, script)
+	return newCmd, ""
 }
 
 func cmdRemoveCommand(data string) string {
