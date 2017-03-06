@@ -219,14 +219,21 @@ func setScriptForTrigger(trigger string, script string) string {
 			}
 			return 0
 		}
+
 		cmds.luaState.PushGoFunction(setChatOutput)
 		cmds.luaState.SetGlobal("setChatOutput")
 
+		cmds.luaState.PushString(input)
+		cmds.luaState.SetGlobal("params")
+
 		err := lua.DoString(cmds.luaState, script)
 
-		// clear our output command
+		// clear the globals we set for this script run
 		cmds.luaState.PushNil()
 		cmds.luaState.SetGlobal("setChatOutput")
+
+		cmds.luaState.PushNil()
+		cmds.luaState.SetGlobal("params")
 
 		if err != nil {
 			return fmt.Sprintf("script error: %s", err)
