@@ -15,6 +15,7 @@ var (
 	cmdPrefixes []string
 	quotes      *store
 	cmds        *commands
+	curCmdMsg   *message
 )
 
 type commands struct {
@@ -65,6 +66,8 @@ func init() {
 		scriptStore:	Store("scripts"),
 		luaState: lua.NewState(),
 	}
+
+	curCmdMsg = nil
 
 	lua.BaseOpen(cmds.luaState)
 	// don't load package functions
@@ -127,9 +130,11 @@ func handle(out chan string, m *message) {
 			if strings.HasPrefix(msg, prefix) {
 				p := split(m.Args[1][len(prefix):], 2)
 				if c := cmds.Get(p[0]); c != nil && (!c.modOnly || m.Mod) {
+					curCmdMsg = m
 					if response := c.fn(p[1]); response != "" {
 						out <- fmt.Sprintf("PRIVMSG %s :\u200B%s\r\n", m.Args[0], response)
 					}
+					curCmdMsg = nil
 				}
 				return
 			}
@@ -220,20 +225,34 @@ func setScriptForTrigger(trigger string, script string) string {
 			return 0
 		}
 
-		cmds.luaState.PushGoFunction(setChatOutput)
-		cmds.luaState.SetGlobal("setChatOutput")
+		l := cmds.luaState
 
-		cmds.luaState.PushString(input)
-		cmds.luaState.SetGlobal("params")
+		l.PushGoFunction(setChatOutput)
+		l.SetGlobal("setChatOutput")
+
+		l.PushString(input)
+		l.SetGlobal("params")
+
+		m := curCmdMsg
+
+		if m != nil {
+			l.PushBoolean(m.Mod)
+			l.SetGlobal("mod")
+
+			l.PushBoolean(m.Sub)
+			l.SetGlobal("sub")
+
+			l.PushString(m.DisplayName)
+			l.SetGlobal("user")
+		}
 
 		err := lua.DoString(cmds.luaState, script)
 
 		// clear the globals we set for this script run
-		cmds.luaState.PushNil()
-		cmds.luaState.SetGlobal("setChatOutput")
-
-		cmds.luaState.PushNil()
-		cmds.luaState.SetGlobal("params")
+		for _, name := range []string{"setChatOutput", "params", "mod", "sub", "user"} {
+			l.PushNil()
+			l.SetGlobal(name)
+		}
 
 		if err != nil {
 			return fmt.Sprintf("script error: %s", err)
