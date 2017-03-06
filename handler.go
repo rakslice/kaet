@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Shopify/go-lua"
 )
 
 var (
@@ -21,6 +23,8 @@ type commands struct {
 	aliases  map[string]string
 	rAliases map[string][]string
 	store    *store
+	scriptStore *store
+	luaState *lua.State
 }
 
 type command struct {
@@ -58,12 +62,19 @@ func init() {
 		aliases:  map[string]string{},
 		rAliases: map[string][]string{},
 		store:    Store("commands"),
+		scriptStore:	Store("scripts"),
+		luaState: lua.NewState(),
 	}
 
 	// Dynamic commands
 	for _, k := range cmds.store.Keys() {
 		v, _ := cmds.store.Get(k)
 		cmds.cmds[k] = &command{func(_ string) string { return v }, false, true}
+	}
+
+	for _, k := range cmds.scriptStore.Keys() {
+		v, _ := cmds.store.Get(k)
+		setScriptForTrigger(k, v)
 	}
 
 	// Pleb commands
@@ -78,6 +89,7 @@ func init() {
 	cmds.cmds["removequote"] = &command{cmdRemoveQuote, true, false}
 	cmds.cmds["addcommand"] = &command{cmdAddCommand, true, false}
 	cmds.cmds["removecommand"] = &command{cmdRemoveCommand, true, false}
+	cmds.cmds["addscriptcommand"] = &command{cmdAddScriptCommand, true, false}
 
 	// Aliases
 	cmds.Alias("halp", "help")
@@ -173,6 +185,53 @@ func cmdAddCommand(data string) string {
 	cmds.store.Add(trigger, msg)
 	cmds.cmds[trigger] = &command{func(_ string) string { return msg }, false, true}
 	return ""
+}
+
+func setScriptForTrigger(trigger string, script string) string {
+	err := lua.LoadString(cmds.luaState, script)
+	if err != nil {
+		return fmt.Sprintf("script error: %s", err)
+	}
+
+	// returns any chat output indicating a problem with the script
+	// is there a two step load / run option available so we can have less overhead each command run?
+	cmds.cmds[trigger] = &command{func(input string) string {
+		output := ""
+		// TODO set up additional RegistryFunction instances for variables and functions we want to be available to the script
+		setChatOutput := func(state *lua.State) int {
+			n := state.Top()
+			if n == 1 {
+				val, ok := state.ToString(1)
+				if ok {
+					output = val
+				}
+			}
+			return 0
+		}
+		// TODO narrow the set of standard libraries we open to ones that make sense for
+		lua.OpenLibraries(cmds.luaState, lua.RegistryFunction{"setChatOutput", setChatOutput})
+		err := lua.DoString(cmds.luaState, script)
+		if err != nil {
+			return fmt.Sprintf("script error: %s", err)
+		} else {
+			// script was successful
+			return output
+		}
+	}, false, true}
+	return ""
+}
+
+func cmdAddScriptCommand(data string) string {
+	cmds.Lock()
+	defer cmds.Unlock()
+	v := split(data, 2)
+	trigger, script := strings.TrimPrefix(v[0], "!"), v[1]
+	existingCmd, existingCmdFound := cmds.cmds[trigger]
+	if (existingCmdFound && !existingCmd.removable) {
+		return "I'm afraid I can't modify that command"
+	}
+	cmds.scriptStore.Add(trigger, script)
+	return setScriptForTrigger(trigger, script)
 }
 
 func cmdRemoveCommand(data string) string {
