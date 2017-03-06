@@ -66,8 +66,16 @@ func init() {
 		luaState: lua.NewState(),
 	}
 
-	// TODO narrow the set of lua standard libraries we open to ones that make sense for scripting capabilities
-	lua.OpenLibraries(cmds.luaState)
+	lua.BaseOpen(cmds.luaState)
+	// don't load package functions
+	// no coroutine functions available
+	lua.StringOpen(cmds.luaState)
+	lua.TableOpen(cmds.luaState)
+	lua.MathOpen(cmds.luaState)
+	lua.Bit32Open(cmds.luaState)
+	// don't load io functions
+	// don't load os functions
+	lua.DebugOpen(cmds.luaState)
 
 	// Dynamic commands
 	for _, k := range cmds.store.Keys() {
