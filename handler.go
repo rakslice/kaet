@@ -153,7 +153,7 @@ func cmdHelp(_ string) string {
 	cmds.RLock()
 	defer cmds.RUnlock()
 	names := []string{}
-	for k, _ := range cmds.cmds {
+	for k := range cmds.cmds {
 		names = append(names, k)
 	}
 	sort.Strings(names)
@@ -208,6 +208,7 @@ func commonAddCommand(data string, curStore *store, commandFactory func(string) 
 	curStore.Add(trigger, data)
 	var output string
 	cmds.cmds[trigger], output = commandFactory(data)
+	// returns any chat output i.e. indicating a problem with the script
 	return output
 }
 
@@ -225,16 +226,25 @@ func createOutputCommand(msg string) (*command, string) {
 }
 
 func createScriptCommand(script string) (*command, string) {
+	// load the script just so we can report any syntax errors right away
+	// TODO is a way to save the loaded script so we don't have to load it each command run?
 	err := lua.LoadString(cmds.luaState, script)
 	if err != nil {
 		return nil, fmt.Sprintf("script error: %s", err)
 	}
 
-	// returns any chat output indicating a problem with the script
-	// is there a two step load / run option available so we can have less overhead each command run?
 	newCmd := &command{func(input string) string {
+		l := cmds.luaState
+
+		// set up data and functions we want to be accessible from the script as globals in the lua environment
+		// TODO consider making additional things available
+		// - Twitch API calls
+		// - Arbitrary web API calls
+		// - Some kind of storage that persists between kaet runs
+
+		// make the line of chat output returned by the command settable from the script
 		output := ""
-		// TODO set up additional RegistryFunction instances for variables and functions we want to be available to the script
+
 		setChatOutput := func(state *lua.State) int {
 			n := state.Top()
 			if n == 1 {
@@ -246,30 +256,33 @@ func createScriptCommand(script string) (*command, string) {
 			return 0
 		}
 
-		l := cmds.luaState
-
 		l.PushGoFunction(setChatOutput)
 		l.SetGlobal("setChatOutput")
 
+		// parameters passed to the chat command
 		l.PushString(input)
 		l.SetGlobal("params")
 
 		m := curCmdMsg
 
 		if m != nil {
+			// the name of the user that entered the command
+			l.PushString(m.DisplayName)
+			l.SetGlobal("user")
+
+			// whether the user that entered the command is a mod
 			l.PushBoolean(m.Mod)
 			l.SetGlobal("mod")
 
+			// whether the user that entered the command is subbed
 			l.PushBoolean(m.Sub)
 			l.SetGlobal("sub")
-
-			l.PushString(m.DisplayName)
-			l.SetGlobal("user")
 		}
 
+		// run the script command
 		err := lua.DoString(cmds.luaState, script)
 
-		// clear the globals we set for this script run
+		// clear the globals we set above
 		for _, name := range []string{"setChatOutput", "params", "mod", "sub", "user"} {
 			l.PushNil()
 			l.SetGlobal(name)
